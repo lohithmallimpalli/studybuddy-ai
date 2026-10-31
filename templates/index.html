@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="StudyBuddy AI - Your Personal AI Study Assistant powered by Google Gemini. Get help with programming, computer science, and AI concepts.">
+    <title>StudyBuddy AI — Your Personal AI Study Assistant</title>
+    <!-- Google Fonts for Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Main Chat Container -->
+        <main class="chat-container">
+            <!-- Header Section -->
+            <header class="chat-header">
+                <div class="header-content">
+                    <div class="brand-group">
+                        <div class="brand-avatar" aria-hidden="true">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                            </svg>
+                        </div>
+                        <div class="brand-titles">
+                            <h1 id="app-title">StudyBuddy AI</h1>
+                            <p class="subtitle" id="app-subtitle">Your Personal AI Study Assistant</p>
+                        </div>
+                    </div>
+                    
+                    <div class="header-actions">
+                        <span class="status-indicator" id="status-pill" title="System Ready">
+                            <span class="status-dot"></span>
+                            <span class="status-text">Ready</span>
+                        </span>
+                        <button type="button" class="btn btn-secondary" id="new-chat-btn" title="Start a fresh conversation">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            <span>New Chat</span>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Alert / Notification Banner -->
+            <div id="notification-banner" class="notification-banner hidden" role="alert">
+                <div class="banner-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                </div>
+                <div class="banner-message" id="banner-text"></div>
+                <button type="button" class="banner-close" id="banner-close-btn" aria-label="Dismiss notification">&times;</button>
+            </div>
+
+            <!-- Chat Messages Scroll Area -->
+            <section class="messages-area" id="messages-container" aria-live="polite">
+                <!-- Empty State Greeting Container -->
+                <div class="empty-state" id="empty-state">
+                    <div class="empty-icon-wrapper">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10a9.957 9.957 0 0 1-4.73-1.189L2 22l1.248-5.068A9.96 9.96 0 0 1 2 12C2 6.477 6.477 2 12 2z"></path>
+                            <path d="M8 12h.01"></path>
+                            <path d="M12 12h.01"></path>
+                            <path d="M16 12h.01"></path>
+                        </svg>
+                    </div>
+                    <h2 class="empty-title">Welcome to StudyBuddy AI!</h2>
+                    <p class="empty-desc">
+                        I can help you understand computer science, master programming concepts in Python, debug code, analyze algorithms, and explain AI/ML topics step-by-step.
+                    </p>
+                    <div class="suggestion-chips">
+                        <span class="chips-label">Try asking:</span>
+                        <div class="chips-grid">
+                            <button type="button" class="suggestion-chip" data-prompt="Explain Big-O notation with simple real-world examples.">
+                                📊 Explain Big-O notation
+                            </button>
+                            <button type="button" class="suggestion-chip" data-prompt="How do Python decorators work behind the scenes?">
+                                🐍 How Python decorators work
+                            </button>
+                            <button type="button" class="suggestion-chip" data-prompt="Explain the difference between BFS and DFS graph traversals.">
+                                🌲 BFS vs DFS algorithms
+                            </button>
+                            <button type="button" class="suggestion-chip" data-prompt="What is gradient descent in machine learning?">
+                                🤖 Explain Gradient Descent
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Messages will be appended here dynamically -->
+                <div class="messages-list" id="messages-list"></div>
+
+                <!-- Loading / Typing Indicator -->
+                <div class="typing-indicator hidden" id="typing-indicator" aria-hidden="true">
+                    <div class="avatar ai-avatar">AI</div>
+                    <div class="typing-bubble">
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Input Bar Section -->
+            <footer class="input-container">
+                <form id="chat-form" class="chat-form" autocomplete="off">
+                    <div class="input-wrapper">
+                        <textarea
+                            id="user-input"
+                            class="chat-textarea"
+                            rows="1"
+                            placeholder="Ask a technical question... (Press Enter to send, Shift+Enter for new line)"
+                            aria-label="Your message"
+                            required
+                        ></textarea>
+                    </div>
+                    <button type="submit" id="send-btn" class="btn btn-primary send-btn" aria-label="Send Message" title="Send message">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                        </svg>
+                        <span class="send-text">Send</span>
+                    </button>
+                </form>
+                <div class="input-footer">
+                    <span class="footer-hint">StudyBuddy AI maintains multi-turn context up to 12 turns.</span>
+                    <span class="conversation-badge" id="conv-id-badge" title="Active Conversation ID">Session: Initializing...</span>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Application Script -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
