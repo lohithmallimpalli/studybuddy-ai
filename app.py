@@ -137,9 +137,21 @@ def manage_context_window(
     if not candidate_messages:
         candidate_messages = [{"role": "user", "content": new_user_message}]
 
+    # Ensure alternating roles by merging adjacent messages with identical roles
+    merged_messages: List[Dict[str, str]] = []
+    for msg in candidate_messages:
+        if merged_messages and merged_messages[-1]["role"] == msg["role"]:
+            merged_messages[-1]["content"] += "\n\n" + msg["content"]
+        else:
+            merged_messages.append({"role": msg["role"], "content": msg["content"]})
+
+    # Ensure final message is the user's message
+    if merged_messages[-1]["role"] != "user":
+        merged_messages.append({"role": "user", "content": new_user_message})
+
     # Convert to Google GenAI Content objects
     contents: List[types.Content] = []
-    for msg in candidate_messages:
+    for msg in merged_messages:
         content_obj = types.Content(
             role=msg["role"],
             parts=[types.Part.from_text(text=msg["content"])]
@@ -147,6 +159,9 @@ def manage_context_window(
         contents.append(content_obj)
 
     return contents
+
+# Known standard Gemini models in priority order for fallback
+FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
 
 def call_gemini_api(
     contents: List[types.Content],
@@ -156,6 +171,7 @@ def call_gemini_api(
 ) -> str:
     """
     Execute a call to the Google Gemini API using the official google-genai SDK.
+    Includes automatic fallback to alternative flash models if the configured model is not found.
     
     Raises:
         ValueError: If response is empty or filtered.
@@ -172,33 +188,54 @@ def call_gemini_api(
         temperature=0.7,
     )
 
-    logger.info("Calling Gemini API with model=%s, context_turns=%d", model_name, len(contents))
-    response = client.models.generate_content(
-        model=model_name,
-        contents=contents,
-        config=config,
-    )
+    # Candidate models to try: specified model first, followed by fallbacks
+    models_to_try = [model_name]
+    for fb in FALLBACK_MODELS:
+        if fb != model_name:
+            models_to_try.append(fb)
 
-    # Validate model response
-    if not response:
-        raise ValueError("No response object received from Gemini API.")
+    last_api_error = None
+    for current_model in models_to_try:
+        try:
+            logger.info("Attempting Gemini API call with model=%s, context_turns=%d", current_model, len(contents))
+            response = client.models.generate_content(
+                model=current_model,
+                contents=contents,
+                config=config,
+            )
 
-    reply_text = response.text
-    if reply_text and reply_text.strip():
-        return reply_text.strip()
+            if not response:
+                raise ValueError("No response object received from Gemini API.")
 
-    # If text is empty, check candidate finish reasons (e.g. SAFETY, RECITATION)
-    if response.candidates:
-        first_candidate = response.candidates[0]
-        finish_reason = getattr(first_candidate, "finish_reason", None)
-        if finish_reason:
-            logger.warning("Gemini generation finished with reason: %s", finish_reason)
-            if "SAFETY" in str(finish_reason).upper():
-                raise ValueError("Response blocked by safety filters. Please rephrase your question.")
-            if "RECITATION" in str(finish_reason).upper():
-                raise ValueError("Response blocked due to recitation policies. Please rephrase.")
+            reply_text = response.text
+            if reply_text and reply_text.strip():
+                return reply_text.strip()
 
-    raise ValueError("The model returned an empty response. Please try asking in a different way.")
+            # If text is empty, inspect candidate finish reasons
+            if response.candidates:
+                first_candidate = response.candidates[0]
+                finish_reason = getattr(first_candidate, "finish_reason", None)
+                if finish_reason:
+                    logger.warning("Gemini generation finished with reason: %s", finish_reason)
+                    if "SAFETY" in str(finish_reason).upper():
+                        raise ValueError("Response blocked by safety filters. Please rephrase your question.")
+                    if "RECITATION" in str(finish_reason).upper():
+                        raise ValueError("Response blocked due to recitation policies. Please rephrase.")
+
+            raise ValueError("The model returned an empty response. Please try asking in a different way.")
+
+        except genai_errors.APIError as ae:
+            last_api_error = ae
+            # If the model was not found (404), try the next model in models_to_try
+            if getattr(ae, "code", None) == 404:
+                logger.warning("Model '%s' returned 404 Not Found. Trying fallback...", current_model)
+                continue
+            # For other API errors (e.g., 401 auth, 429 quota), raise immediately
+            raise ae
+
+    if last_api_error:
+        raise last_api_error
+    raise ValueError("All candidate Gemini models failed to generate a response.")
 
 # ---------------------------------------------------------------------------
 # Routes

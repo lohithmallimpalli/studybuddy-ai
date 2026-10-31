@@ -477,13 +477,53 @@ html, body {
     background-color: #080c16;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-sm);
-    padding: 12px;
-    margin: 10px 0;
-    overflow-x: auto;
+    padding: 0;
+    margin: 12px 0;
+    overflow: hidden;
     font-family: var(--font-mono);
     font-size: 0.85rem;
-    color: #38bdf8;
     line-height: 1.5;
+}
+
+.code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    padding: 6px 12px;
+}
+
+.code-lang-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+
+.code-copy-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.code-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.message-bubble pre code {
+    display: block;
+    padding: 12px;
+    overflow-x: auto;
+    background: transparent;
+    border-radius: 0;
+    color: #38bdf8;
 }
 
 .message-bubble code {
@@ -498,6 +538,27 @@ html, body {
 .message-item.user .message-bubble code {
     background-color: rgba(255, 255, 255, 0.2);
     color: #ffffff;
+}
+
+.chat-list {
+    margin: 8px 0 8px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.chat-list li {
+    line-height: 1.5;
+}
+
+.message-bubble strong {
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.message-bubble em {
+    font-style: italic;
+    color: #cbd5e1;
 }
 
 .message-bubble p {

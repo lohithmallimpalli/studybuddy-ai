@@ -58,18 +58,20 @@ TURNS = [
 ]
 
 
-def run_test():
+def run_test(use_mock: bool = False):
     print("=" * 70)
-    print("StudyBuddy AI — 5-Turn Memory Verification Test")
+    print("StudyBuddy AI — 5-Turn Memory Verification Test" + (" (MOCK MODE)" if use_mock else " (REAL GEMINI API)"))
     print("=" * 70)
 
     api_key = get_gemini_api_key()
-    if not api_key:
+    if not use_mock and not api_key:
         print("\n[!] GEMINI_API_KEY is not configured or is a placeholder in .env.")
         print("    Please set a valid GEMINI_API_KEY in .env before running live tests.")
         print("    Example:")
         print("      GEMINI_API_KEY=AIzaSyYourActualKeyHere")
-        print("\n    To run automated unit tests with mocks instead, run:")
+        print("\n    To verify the conversation flow with simulated responses right now, run:")
+        print("      python run_memory_test.py --mock")
+        print("    Or run the full test suite with:")
         print("      pytest -v test_app.py\n")
         return False
 
@@ -79,34 +81,60 @@ def run_test():
     client = app.test_client()
     passed_all = True
 
-    for item in TURNS:
-        turn_num = item["turn"]
-        prompt = item["prompt"]
-        print(f"--- Turn {turn_num} ---")
-        print(f"User : {prompt}")
+    if use_mock:
+        from unittest.mock import patch
+        os.environ["GEMINI_API_KEY"] = "mock_key_for_testing"
 
-        response = client.post(
-            "/chat",
-            json={"message": prompt, "conversation_id": conversation_id},
-        )
+        def mock_gemini_behavior(contents, *args):
+            history_text = " ".join([p.text for c in contents for p in c.parts])
+            last_msg = contents[-1].parts[0].text
+            if "What is my name" in last_msg:
+                return "Your name is Rahul, and you are learning Python programming!"
+            elif "What kind of projects" in last_msg:
+                return "You mentioned that you want to build AI projects using Python."
+            elif "Rahul" in last_msg:
+                return "Nice to meet you, Rahul! Python is a great language to learn."
+            elif "beginner" in last_msg:
+                return "Welcome to coding! As a beginner, focus on fundamentals like loops and functions."
+            elif "AI projects" in last_msg:
+                return "Building AI projects with Python is exciting. You will learn libraries like NumPy, PyTorch, and Gemini SDK."
+            return f"Understood: {last_msg}"
 
-        if response.status_code != 200:
-            print(f"[ERROR] Request failed with HTTP {response.status_code}")
-            print(f"Server response: {response.get_data(as_text=True)}")
-            return False
+        mock_patcher = patch("app.call_gemini_api", side_effect=mock_gemini_behavior)
+        mock_patcher.start()
 
-        data = response.get_json()
-        reply = data.get("reply", "")
-        print(f"AI   : {reply.strip()}\n")
+    try:
+        for item in TURNS:
+            turn_num = item["turn"]
+            prompt = item["prompt"]
+            print(f"--- Turn {turn_num} ---")
+            print(f"User : {prompt}")
 
-        check_fn = item.get("expected_check")
-        if check_fn:
-            desc = item.get("expected_description", "Memory verification")
-            if check_fn(reply):
-                print(f"  [PASSED] Turn {turn_num} memory check passed: ({desc})\n")
-            else:
-                print(f"  [FAILED] Turn {turn_num} memory check failed: ({desc})\n")
-                passed_all = False
+            response = client.post(
+                "/chat",
+                json={"message": prompt, "conversation_id": conversation_id},
+            )
+
+            if response.status_code != 200:
+                print(f"[ERROR] Request failed with HTTP {response.status_code}")
+                print(f"Server response: {response.get_data(as_text=True)}")
+                return False
+
+            data = response.get_json()
+            reply = data.get("reply", "")
+            print(f"AI   : {reply.strip()}\n")
+
+            check_fn = item.get("expected_check")
+            if check_fn:
+                desc = item.get("expected_description", "Memory verification")
+                if check_fn(reply):
+                    print(f"  [PASSED] Turn {turn_num} memory check passed: ({desc})\n")
+                else:
+                    print(f"  [FAILED] Turn {turn_num} memory check failed: ({desc})\n")
+                    passed_all = False
+    finally:
+        if use_mock:
+            mock_patcher.stop()
 
     print("=" * 70)
     if passed_all:
@@ -118,5 +146,6 @@ def run_test():
 
 
 if __name__ == "__main__":
-    success = run_test()
+    is_mock = "--mock" in sys.argv
+    success = run_test(use_mock=is_mock)
     sys.exit(0 if success else 1)

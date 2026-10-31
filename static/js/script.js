@@ -148,6 +148,32 @@
             if (lang) {
                 preElem.setAttribute("data-lang", lang);
             }
+            
+            // Code header with language and copy button
+            const codeHeader = document.createElement("div");
+            codeHeader.className = "code-header";
+            
+            const langLabel = document.createElement("span");
+            langLabel.className = "code-lang-label";
+            langLabel.textContent = lang ? lang.toUpperCase() : "CODE";
+            
+            const copyBtn = document.createElement("button");
+            copyBtn.type = "button";
+            copyBtn.className = "code-copy-btn";
+            copyBtn.textContent = "Copy";
+            copyBtn.addEventListener("click", function () {
+                navigator.clipboard.writeText(codeContent).then(() => {
+                    copyBtn.textContent = "Copied!";
+                    setTimeout(() => { copyBtn.textContent = "Copy"; }, 2000);
+                }).catch(() => {
+                    copyBtn.textContent = "Failed";
+                });
+            });
+
+            codeHeader.appendChild(langLabel);
+            codeHeader.appendChild(copyBtn);
+            preElem.appendChild(codeHeader);
+
             const codeElem = document.createElement("code");
             codeElem.textContent = codeContent; // SAFE: sets text only
             preElem.appendChild(codeElem);
@@ -163,37 +189,86 @@
     }
 
     /**
-     * Helper to render normal text paragraphs and handle inline backticks
+     * Render inline formatting (code, bold, italic) safely into a parent element
+     */
+    function renderInlineFormattedText(parent, text) {
+        // Pattern matches: `inline code` OR **bold** OR *italic*
+        const tokenRegex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+        let lastPos = 0;
+        let tokenMatch;
+
+        while ((tokenMatch = tokenRegex.exec(text)) !== null) {
+            const rawPrefix = text.slice(lastPos, tokenMatch.index);
+            if (rawPrefix) {
+                parent.appendChild(document.createTextNode(rawPrefix));
+            }
+
+            const token = tokenMatch[0];
+            if (token.startsWith("`") && token.endsWith("`")) {
+                const codeElem = document.createElement("code");
+                codeElem.textContent = token.slice(1, -1);
+                parent.appendChild(codeElem);
+            } else if (token.startsWith("**") && token.endsWith("**")) {
+                const strongElem = document.createElement("strong");
+                strongElem.textContent = token.slice(2, -2);
+                parent.appendChild(strongElem);
+            } else if (token.startsWith("*") && token.endsWith("*")) {
+                const emElem = document.createElement("em");
+                emElem.textContent = token.slice(1, -1);
+                parent.appendChild(emElem);
+            }
+
+            lastPos = tokenMatch.index + token.length;
+        }
+
+        const trailing = text.slice(lastPos);
+        if (trailing) {
+            parent.appendChild(document.createTextNode(trailing));
+        }
+    }
+
+    /**
+     * Helper to render text paragraphs, bullet points, and ordered lists
      */
     function renderTextParagraphs(container, text) {
-        const paragraphs = text.split(/\n\s*\n/);
-        for (const para of paragraphs) {
-            const cleanPara = para.trim();
-            if (!cleanPara) continue;
+        const blocks = text.split(/\n\s*\n/);
+        for (const block of blocks) {
+            const cleanBlock = block.trim();
+            if (!cleanBlock) continue;
 
-            const pElem = document.createElement("p");
-
-            // Split on inline code: `code`
-            const inlineCodeRegex = /`([^`]+)`/g;
-            let pLastIndex = 0;
-            let inlineMatch;
-
-            while ((inlineMatch = inlineCodeRegex.exec(cleanPara)) !== null) {
-                const regularSegment = cleanPara.slice(pLastIndex, inlineMatch.index);
-                if (regularSegment) {
-                    pElem.appendChild(document.createTextNode(regularSegment));
+            const lines = cleanBlock.split("\n");
+            
+            // Check if this block is an unordered list
+            if (lines.every(line => /^[-*]\s+/.test(line.trim()))) {
+                const ul = document.createElement("ul");
+                ul.className = "chat-list";
+                for (const line of lines) {
+                    const li = document.createElement("li");
+                    const itemContent = line.trim().replace(/^[-*]\s+/, "");
+                    renderInlineFormattedText(li, itemContent);
+                    ul.appendChild(li);
                 }
-                const inlineCodeElem = document.createElement("code");
-                inlineCodeElem.textContent = inlineMatch[1]; // SAFE: textContent
-                pElem.appendChild(inlineCodeElem);
-                pLastIndex = inlineMatch.index + inlineMatch[0].length;
+                container.appendChild(ul);
+                continue;
             }
 
-            const trailingSegment = cleanPara.slice(pLastIndex);
-            if (trailingSegment) {
-                pElem.appendChild(document.createTextNode(trailingSegment));
+            // Check if this block is an ordered list
+            if (lines.every(line => /^\d+\.\s+/.test(line.trim()))) {
+                const ol = document.createElement("ol");
+                ol.className = "chat-list";
+                for (const line of lines) {
+                    const li = document.createElement("li");
+                    const itemContent = line.trim().replace(/^\d+\.\s+/, "");
+                    renderInlineFormattedText(li, itemContent);
+                    ol.appendChild(li);
+                }
+                container.appendChild(ol);
+                continue;
             }
 
+            // Standard Paragraph
+            const pElem = document.createElement("p");
+            renderInlineFormattedText(pElem, cleanBlock);
             container.appendChild(pElem);
         }
     }

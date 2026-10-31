@@ -257,6 +257,37 @@ def test_five_turn_conversation_flow_mocked(client, monkeypatch):
         assert len(conversations_store[conv_id]) == 10
 
 
+def test_manage_context_window_merges_adjacent_same_role():
+    """Verify that adjacent same-role messages are merged into valid alternating sequences."""
+    history = [
+        {"role": "user", "content": "Question 1"},
+        {"role": "user", "content": "Question 1 follow-up"},  # Consecutive user
+        {"role": "model", "content": "Answer 1"},
+        {"role": "model", "content": "Answer 1 extra note"},  # Consecutive model
+    ]
+    new_msg = "Question 2"
+    contents = manage_context_window(history, new_msg)
+
+    # Roles must strictly alternate: user, model, user
+    roles = [c.role for c in contents]
+    assert roles == ["user", "model", "user"]
+    assert "follow-up" in contents[0].parts[0].text
+    assert "extra note" in contents[1].parts[0].text
+    assert contents[2].parts[0].text == "Question 2"
+
+
+def test_chat_handles_unicode_and_markdown(client, monkeypatch):
+    """Verify that messages with emojis, mathematical notation, and code snippets are handled cleanly."""
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy_test_key_for_mock")
+    complex_prompt = "What is ∑(x² + √y)? 🚀 Here is code: `def foo(): return 42`"
+
+    with patch("app.call_gemini_api", return_value="The formula represents summation. ✨"):
+        response = client.post("/chat", json={"message": complex_prompt})
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "summation" in data["reply"]
+
+
 # ---------------------------------------------------------------------------
 # Real Gemini API Test (Skipped when no live key is configured)
 # ---------------------------------------------------------------------------
