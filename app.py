@@ -55,7 +55,7 @@ logger.addFilter(SensitiveDataFilter())
 # Configuration & Constants
 # ---------------------------------------------------------------------------
 MAX_HISTORY_MESSAGES: int = 12  # Maximum number of messages passed to Gemini API
-DEFAULT_MODEL: str = "gemini-2.5-flash"
+DEFAULT_MODEL: str = "gemini-flash-lite-latest"
 DEFAULT_TIMEOUT_SECONDS: float = 30.0
 
 SYSTEM_PROMPT: str = (
@@ -161,7 +161,7 @@ def manage_context_window(
     return contents
 
 # Known standard Gemini models in priority order for fallback
-FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+FALLBACK_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
 
 def call_gemini_api(
     contents: List[types.Content],
@@ -178,9 +178,11 @@ def call_gemini_api(
         genai_errors.APIError: If Gemini API returns an error.
         Exception: On network, timeout, or unexpected errors.
     """
+    # Convert timeout from seconds to milliseconds for Google GenAI HttpOptions
+    timeout_ms = int(timeout * 1000) if timeout else 30000
     client = genai.Client(
         api_key=api_key,
-        http_options=types.HttpOptions(timeout=timeout)
+        http_options=types.HttpOptions(timeout=timeout_ms)
     )
 
     config = types.GenerateContentConfig(
@@ -226,9 +228,9 @@ def call_gemini_api(
 
         except genai_errors.APIError as ae:
             last_api_error = ae
-            # If the model was not found (404), try the next model in models_to_try
-            if getattr(ae, "code", None) == 404:
-                logger.warning("Model '%s' returned 404 Not Found. Trying fallback...", current_model)
+            # If the model was not found (404) or experiencing temporary spikes (503), try the next model
+            if getattr(ae, "code", None) in (404, 503):
+                logger.warning("Model '%s' returned %s. Trying fallback...", current_model, getattr(ae, "code", None))
                 continue
             # For other API errors (e.g., 401 auth, 429 quota), raise immediately
             raise ae
