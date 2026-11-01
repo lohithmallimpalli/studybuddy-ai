@@ -1,12 +1,14 @@
 /**
- * StudyBuddy AI — Professional Frontend Application Logic
- * Inspired by ChatGPT & Gemini.
+ * StudyBuddy AI — Professional Frontend Application Logic (v3.0)
+ * Multi-user platform supporting Registered Accounts and Persistent Guest Access.
  * Features:
+ * - Multi-user authentication & profile status display
+ * - Guest mode with usage counter and seamless account upgrade modal (with chat transfer)
  * - Persistent SQLite conversation history & sidebar management
- * - Date grouping (Today, Yesterday, Previous 7 Days, Older)
+ * - Chronological date grouping (Today, Yesterday, Previous 7 Days, Older)
  * - Three-dot dropdown menu for Rename & Delete
  * - Real-time conversation search
- * - Collapsible & mobile slide-out drawer sidebar
+ * - Collapsible desktop sidebar & mobile slide-out drawer
  * - Rich Markdown parsing with code copy & syntax tokenization
  * - Safe XSS prevention using native DOM methods
  * - Copy response & Regenerate response support
@@ -21,6 +23,7 @@
     // Application State
     // ---------------------------------------------------------------------------
     const state = {
+        currentUser: null,       // { id, name, email, is_guest, guest_message_count, guest_limit }
         conversationId: null,
         conversationTitle: "New Study Session",
         conversations: [],       // Array of { id, title, created_at, updated_at, message_count, last_message }
@@ -74,7 +77,23 @@
         sendBtn: document.getElementById("send-btn"),
         stopBtn: document.getElementById("stop-btn"),
         sessionBadge: document.getElementById("session-badge"),
+
+        // User & Guest Account Elements
+        registeredUserCard: document.getElementById("registered-user-card"),
+        guestUserCard: document.getElementById("guest-user-card"),
+        userAvatarText: document.getElementById("user-avatar-text"),
+        userDisplayName: document.getElementById("user-display-name"),
+        userDisplayEmail: document.getElementById("user-display-email"),
+        guestUsageText: document.getElementById("guest-usage-text"),
+        btnOpenUpgradeModal: document.getElementById("btn-open-upgrade-modal"),
+        btnLogout: document.getElementById("btn-logout"),
+        headerLogoutBtn: document.getElementById("header-logout-btn"),
         
+        // Upgrade Modal
+        upgradeModal: document.getElementById("upgrade-modal"),
+        upgradeCancelBtn: document.getElementById("upgrade-cancel-btn"),
+        formUpgradeGuest: document.getElementById("form-upgrade-guest"),
+
         // Modals & Dropdown
         renameModal: document.getElementById("rename-modal"),
         renameInput: document.getElementById("rename-input"),
@@ -193,6 +212,110 @@
     }
 
     // ---------------------------------------------------------------------------
+    // User Profile & Authentication Logic
+    // ---------------------------------------------------------------------------
+    async function loadCurrentUser() {
+        try {
+            const res = await fetch("/auth/me");
+            if (res.ok) {
+                const data = await res.json();
+                state.currentUser = data.user;
+                renderUserCard();
+            }
+        } catch (err) {
+            console.error("Failed to load user profile:", err);
+        }
+    }
+
+    function renderUserCard() {
+        const user = state.currentUser;
+        if (!user) return;
+
+        if (user.is_guest) {
+            if (elements.registeredUserCard) elements.registeredUserCard.classList.add("hidden");
+            if (elements.guestUserCard) {
+                elements.guestUserCard.classList.remove("hidden");
+                if (elements.guestUsageText) {
+                    elements.guestUsageText.textContent = `${user.guest_message_count || 0}/${user.guest_limit || 25} used`;
+                }
+            }
+        } else {
+            if (elements.guestUserCard) elements.guestUserCard.classList.add("hidden");
+            if (elements.registeredUserCard) {
+                elements.registeredUserCard.classList.remove("hidden");
+                if (elements.userDisplayName) elements.userDisplayName.textContent = user.name || "Student";
+                if (elements.userDisplayEmail) elements.userDisplayEmail.textContent = user.email || "";
+                if (elements.userAvatarText) {
+                    elements.userAvatarText.textContent = user.name ? user.name.slice(0, 2).toUpperCase() : "ST";
+                }
+            }
+        }
+    }
+
+    async function handleLogout() {
+        try {
+            await fetch("/auth/logout", { method: "POST" });
+            window.location.reload();
+        } catch (err) {
+            window.location.href = "/login";
+        }
+    }
+
+    function openUpgradeModal() {
+        if (elements.upgradeModal) {
+            elements.upgradeModal.classList.remove("hidden");
+            const nameInput = document.getElementById("upgrade-name");
+            if (nameInput) nameInput.focus();
+        }
+    }
+
+    function closeUpgradeModal() {
+        if (elements.upgradeModal) {
+            elements.upgradeModal.classList.add("hidden");
+        }
+    }
+
+    async function handleUpgradeGuestSubmit(e) {
+        e.preventDefault();
+        const name = document.getElementById("upgrade-name").value.trim();
+        const email = document.getElementById("upgrade-email").value.trim();
+        const password = document.getElementById("upgrade-password").value;
+        const transfer_chats = document.getElementById("upgrade-transfer-chats").checked;
+        const submitBtn = document.getElementById("upgrade-confirm-btn");
+
+        if (password.length < 6) {
+            showNotification("Password must be at least 6 characters.");
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Upgrading...";
+
+        try {
+            const res = await fetch("/auth/upgrade-guest", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, email, password, transfer_chats })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                state.currentUser = data.user;
+                closeUpgradeModal();
+                renderUserCard();
+                showNotification(`Account upgraded successfully! Welcome, ${data.user.name || "Student"}!`, "warning");
+                loadConversations(false);
+            } else {
+                showNotification(data.error || "Failed to upgrade account.");
+            }
+        } catch (err) {
+            showNotification("Failed to communicate with server.");
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Create & Transfer";
+        }
+    }
+
+    // ---------------------------------------------------------------------------
     // Sidebar Conversations Management & Grouping
     // ---------------------------------------------------------------------------
     async function loadConversations(autoSelectRecent = false) {
@@ -204,7 +327,6 @@
             renderSidebarHistory();
 
             if (autoSelectRecent && state.conversations.length > 0) {
-                // Select the most recent conversation
                 selectConversation(state.conversations[0].id);
             } else if (!state.conversationId) {
                 initNewChat();
@@ -234,7 +356,6 @@
             if (elements.historyEmptyState) elements.historyEmptyState.classList.add("hidden");
         }
 
-        // Group conversations by category
         const groups = {
             "Today": [],
             "Yesterday": [],
@@ -251,7 +372,6 @@
             }
         });
 
-        // Render each populated group
         ["Today", "Yesterday", "Previous 7 Days", "Older"].forEach(groupName => {
             const list = groups[groupName];
             if (list.length === 0) return;
@@ -344,7 +464,6 @@
             state.conversationTitle = conv.title || "Study Session";
             state.messages = msgs;
 
-            // Update UI
             if (elements.titleText) elements.titleText.textContent = state.conversationTitle;
             if (elements.sessionBadge) {
                 elements.sessionBadge.textContent = `ID: ${state.conversationId.slice(0, 8)}...`;
@@ -429,7 +548,6 @@
 
             if (!res.ok) throw new Error("Rename failed");
 
-            // Update in local state
             const target = state.conversations.find(c => c.id === convId);
             if (target) target.title = newTitle;
 
@@ -473,7 +591,6 @@
             closeDeleteModal();
 
             if (state.conversationId === convId) {
-                // If current conversation was deleted, start fresh new chat
                 if (state.conversations.length > 0) {
                     selectConversation(state.conversations[0].id);
                 } else {
@@ -502,7 +619,6 @@
 
     async function handleClearAllConfirm() {
         try {
-            // Delete all conversations sequentially or in batch
             for (const c of state.conversations) {
                 await fetch(`/conversations/${c.id}`, { method: "DELETE" });
             }
@@ -519,7 +635,6 @@
     // Markdown Rendering & Syntax Highlighting (XSS-Safe)
     // ---------------------------------------------------------------------------
     function tokenizeCode(codeText, lang) {
-        // Highlighting for Python, JavaScript, CSS, HTML keywords & tokens
         const keywords = new Set([
             "def", "return", "import", "from", "class", "if", "elif", "else", "for",
             "while", "try", "except", "finally", "with", "as", "pass", "break", "continue",
@@ -529,14 +644,12 @@
         ]);
 
         const fragment = document.createDocumentFragment();
-        // Regex matches comments (# or //), strings ('..' or ".."), numbers, and words
         const regex = /(#[^\n]*|\/\/[^\n]*|"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b\d+(?:\.\d+)?\b|\b[a-zA-Z_][a-zA-Z0-9_]*\b|[+\-*/%=<>!&|^~]+)/g;
 
         let lastIndex = 0;
         let match;
 
         while ((match = regex.exec(codeText)) !== null) {
-            // Plain text before match
             if (match.index > lastIndex) {
                 fragment.appendChild(document.createTextNode(codeText.slice(lastIndex, match.index)));
             }
@@ -575,7 +688,6 @@
     }
 
     function renderSafeMessageContent(container, rawText) {
-        // Match fenced code blocks: ```lang \n code ```
         const codeBlockRegex = /```([a-zA-Z0-9_\-#+]*)\n([\s\S]*?)```/g;
         let lastIndex = 0;
         let match;
@@ -589,7 +701,6 @@
             const lang = (match[1] || "code").toLowerCase();
             const codeContent = match[2];
 
-            // Build Code Container
             const codeBox = document.createElement("div");
             codeBox.className = "code-container";
 
@@ -637,7 +748,6 @@
     }
 
     function renderInlineFormattedText(parent, text) {
-        // Matches `code`, **bold**, *italic*
         const tokenRegex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
         let lastPos = 0;
         let tokenMatch;
@@ -678,7 +788,6 @@
             const clean = block.trim();
             if (!clean) continue;
 
-            // Headings
             if (clean.startsWith("### ")) {
                 const h3 = document.createElement("h3");
                 renderInlineFormattedText(h3, clean.slice(4));
@@ -696,7 +805,6 @@
                 continue;
             }
 
-            // Blockquotes
             if (clean.startsWith("> ")) {
                 const bq = document.createElement("blockquote");
                 renderInlineFormattedText(bq, clean.slice(2));
@@ -706,7 +814,6 @@
 
             const lines = clean.split("\n");
 
-            // Unordered List
             if (lines.every(line => /^[-*]\s+/.test(line.trim()))) {
                 const ul = document.createElement("ul");
                 for (const line of lines) {
@@ -718,7 +825,6 @@
                 continue;
             }
 
-            // Ordered List
             if (lines.every(line => /^\d+\.\s+/.test(line.trim()))) {
                 const ol = document.createElement("ol");
                 for (const line of lines) {
@@ -730,7 +836,6 @@
                 continue;
             }
 
-            // Standard Paragraph
             const p = document.createElement("p");
             renderInlineFormattedText(p, clean);
             container.appendChild(p);
@@ -768,14 +873,12 @@
         const messageItem = document.createElement("div");
         messageItem.className = `message-item ${isUser ? "user" : "ai"}`;
 
-        // Avatar
         const avatar = document.createElement("div");
         avatar.className = `avatar ${isUser ? "user-avatar" : "ai-avatar"}`;
         avatar.innerHTML = isUser
             ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`
             : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10a9.957 9.957 0 0 1-4.73-1.189L2 22l1.248-5.068A9.96 9.96 0 0 1 2 12C2 6.477 6.477 2 12 2z"></path><path d="m9 12 2 2 4-4"></path></svg>`;
 
-        // Content
         const contentWrapper = document.createElement("div");
         contentWrapper.className = "message-content";
 
@@ -790,12 +893,10 @@
         contentWrapper.appendChild(bubble);
         contentWrapper.appendChild(meta);
 
-        // Add Action Toolbar for AI message (Copy & Regenerate)
         if (!isUser) {
             const actionsBar = document.createElement("div");
             actionsBar.className = "message-actions-bar";
 
-            // Copy response button
             const copyResponseBtn = document.createElement("button");
             copyResponseBtn.type = "button";
             copyResponseBtn.className = "btn-msg-action";
@@ -811,7 +912,6 @@
             });
             actionsBar.appendChild(copyResponseBtn);
 
-            // Regenerate button (rendered on latest turn)
             if (isLastTurn) {
                 const regenBtn = document.createElement("button");
                 regenBtn.type = "button";
@@ -880,11 +980,9 @@
         appendMessage("user", text, nowIso);
         state.messages.push({ role: "user", content: text, timestamp: nowIso });
 
-        // Clear input field and reset height
         elements.userInput.value = "";
         elements.userInput.style.height = "auto";
 
-        // Setup AbortController for stop support
         state.activeAbortController = new AbortController();
         setGeneratingState(true);
 
@@ -904,9 +1002,14 @@
             if (!res.ok) {
                 const errorMsg = data.error || `Server responded with HTTP ${res.status}`;
                 setStatus("error");
-                showNotification(errorMsg, res.status === 503 ? "warning" : "error");
 
-                // Render error notice
+                if (res.status === 403 && data.limit_reached) {
+                    showNotification(errorMsg, "warning");
+                    openUpgradeModal();
+                } else {
+                    showNotification(errorMsg, res.status === 503 ? "warning" : "error");
+                }
+
                 const errCard = document.createElement("div");
                 errCard.className = "message-item ai";
                 errCard.innerHTML = `
@@ -923,20 +1026,23 @@
                 return;
             }
 
-            // Sync conversation ID & title returned by server
             if (data.conversation_id) state.conversationId = data.conversation_id;
             if (data.title) {
                 state.conversationTitle = data.title;
                 if (elements.titleText) elements.titleText.textContent = data.title;
             }
 
-            // Append AI response
+            // Update guest usage count if applicable
+            if (data.is_guest && typeof data.guest_message_count === "number" && state.currentUser) {
+                state.currentUser.guest_message_count = data.guest_message_count;
+                renderUserCard();
+            }
+
             const replyText = data.reply || "";
             const replyIso = new Date().toISOString();
             state.messages.push({ role: "model", content: replyText, timestamp: replyIso });
             appendMessage("model", replyText, replyIso, true);
 
-            // Refresh conversations in sidebar to display updated titles & previews
             loadConversations(false);
 
         } catch (err) {
@@ -957,13 +1063,11 @@
     async function regenerateLastResponse() {
         if (state.isGenerating || !state.conversationId) return;
 
-        // Remove last model message from DOM
         const aiItems = elements.messagesList.querySelectorAll(".message-item.ai");
         if (aiItems.length > 0) {
             aiItems[aiItems.length - 1].remove();
         }
 
-        // Setup AbortController
         state.activeAbortController = new AbortController();
         setGeneratingState(true);
 
@@ -1045,7 +1149,6 @@
     // Event Registration
     // ---------------------------------------------------------------------------
     function registerEvents() {
-        // Chat Form Submission
         if (elements.chatForm) {
             elements.chatForm.addEventListener("submit", function (e) {
                 e.preventDefault();
@@ -1053,12 +1156,10 @@
             });
         }
 
-        // Stop generation button
         if (elements.stopBtn) {
             elements.stopBtn.addEventListener("click", stopGeneration);
         }
 
-        // Textarea Keyboard: Enter sends, Shift+Enter newline
         if (elements.userInput) {
             elements.userInput.addEventListener("keydown", function (e) {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -1069,7 +1170,6 @@
             elements.userInput.addEventListener("input", autoResizeTextarea);
         }
 
-        // New Chat Buttons
         if (elements.sidebarNewChatBtn) {
             elements.sidebarNewChatBtn.addEventListener("click", initNewChat);
         }
@@ -1077,7 +1177,6 @@
             elements.headerNewChatBtn.addEventListener("click", initNewChat);
         }
 
-        // Suggestion Cards (6 items)
         if (elements.suggestionCards) {
             elements.suggestionCards.forEach(card => {
                 card.addEventListener("click", function () {
@@ -1091,7 +1190,6 @@
             });
         }
 
-        // Sidebar Desktop Collapse / Expand
         if (elements.sidebarCollapseBtn) {
             elements.sidebarCollapseBtn.addEventListener("click", toggleSidebarCollapse);
         }
@@ -1099,7 +1197,6 @@
             elements.desktopExpandBtn.addEventListener("click", toggleSidebarCollapse);
         }
 
-        // Mobile Sidebar Drawer
         if (elements.mobileMenuBtn) {
             elements.mobileMenuBtn.addEventListener("click", openMobileSidebar);
         }
@@ -1146,7 +1243,6 @@
             });
         }
 
-        // Close dropdown when clicking anywhere outside
         document.addEventListener("click", function (e) {
             if (elements.dropdownMenu && !elements.dropdownMenu.contains(e.target)) {
                 closeDropdownMenu();
@@ -1186,6 +1282,25 @@
             elements.clearAllConfirmBtn.addEventListener("click", handleClearAllConfirm);
         }
 
+        // Upgrade Guest Modal Buttons
+        if (elements.btnOpenUpgradeModal) {
+            elements.btnOpenUpgradeModal.addEventListener("click", openUpgradeModal);
+        }
+        if (elements.upgradeCancelBtn) {
+            elements.upgradeCancelBtn.addEventListener("click", closeUpgradeModal);
+        }
+        if (elements.formUpgradeGuest) {
+            elements.formUpgradeGuest.addEventListener("submit", handleUpgradeGuestSubmit);
+        }
+
+        // Logout Buttons
+        if (elements.btnLogout) {
+            elements.btnLogout.addEventListener("click", handleLogout);
+        }
+        if (elements.headerLogoutBtn) {
+            elements.headerLogoutBtn.addEventListener("click", handleLogout);
+        }
+
         // Theme Toggle Button
         if (elements.themeToggleBtn) {
             elements.themeToggleBtn.addEventListener("click", toggleTheme);
@@ -1207,21 +1322,19 @@
 
         // Global Keyboard Shortcuts
         document.addEventListener("keydown", function (e) {
-            // ⌘N or Ctrl+N -> New Chat
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
                 e.preventDefault();
                 initNewChat();
             }
-            // ⌘[ or Ctrl+[ -> Toggle Sidebar
             if ((e.metaKey || e.ctrlKey) && e.key === "[") {
                 e.preventDefault();
                 toggleSidebarCollapse();
             }
-            // Escape closes modals
             if (e.key === "Escape") {
                 closeRenameModal();
                 closeDeleteModal();
                 closeClearAllModal();
+                closeUpgradeModal();
                 closeDropdownMenu();
                 closeMobileSidebar();
             }
@@ -1234,6 +1347,7 @@
     document.addEventListener("DOMContentLoaded", function () {
         initTheme();
         registerEvents();
+        loadCurrentUser();
         loadConversations(true);
     });
 })();

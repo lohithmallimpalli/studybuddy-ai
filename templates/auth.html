@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="StudyBuddy AI — Sign in, create an account, or continue instantly as a guest to access your AI study tutor.">
+    <title>Account Access — StudyBuddy AI</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="auth-body">
+    <div class="auth-container">
+        <!-- Brand Header -->
+        <header class="auth-header">
+            <a href="/" class="auth-brand" title="Back to StudyBuddy AI">
+                <div class="brand-logo" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10a9.957 9.957 0 0 1-4.73-1.189L2 22l1.248-5.068A9.96 9.96 0 0 1 2 12C2 6.477 6.477 2 12 2z"></path>
+                        <path d="m9 12 2 2 4-4"></path>
+                    </svg>
+                </div>
+                <div class="brand-info">
+                    <span class="brand-name">StudyBuddy AI</span>
+                    <span class="brand-tag">CS & AI Study Platform</span>
+                </div>
+            </a>
+        </header>
+
+        <!-- Auth Card -->
+        <main class="auth-card">
+            <!-- Tabs Navigation -->
+            <nav class="auth-tabs" role="tablist">
+                <button type="button" class="auth-tab {% if initial_tab != 'register' and initial_tab != 'forgot' %}active{% endif %}" id="tab-login" role="tab" aria-selected="true" aria-controls="panel-login">
+                    Sign In
+                </button>
+                <button type="button" class="auth-tab {% if initial_tab == 'register' %}active{% endif %}" id="tab-register" role="tab" aria-selected="false" aria-controls="panel-register">
+                    Create Account
+                </button>
+                <button type="button" class="auth-tab {% if initial_tab == 'forgot' %}active{% endif %}" id="tab-forgot" role="tab" aria-selected="false" aria-controls="panel-forgot">
+                    Reset Password
+                </button>
+            </nav>
+
+            <!-- Status Alert Box -->
+            <div id="auth-alert" class="auth-alert hidden" role="alert">
+                <span class="alert-icon" aria-hidden="true">⚠️</span>
+                <span class="alert-text" id="auth-alert-text"></span>
+                <button type="button" class="alert-close" id="auth-alert-close">&times;</button>
+            </div>
+
+            <!-- Instant Guest Access Banner -->
+            <div class="guest-banner">
+                <div class="guest-banner-content">
+                    <span class="guest-badge">Instant Access</span>
+                    <h3 class="guest-title">Try StudyBuddy as a Guest</h3>
+                    <p class="guest-desc">No email or password needed. Start asking computer science and AI questions immediately.</p>
+                </div>
+                <button type="button" class="btn btn-guest" id="btn-continue-guest">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <polyline points="16 11 18 13 22 9"></polyline>
+                    </svg>
+                    <span>Continue as Guest</span>
+                </button>
+            </div>
+
+            <div class="auth-divider">
+                <span>or access your permanent account</span>
+            </div>
+
+            <!-- Panel 1: Login Form -->
+            <section class="auth-panel {% if initial_tab != 'register' and initial_tab != 'forgot' %}active{% endif %}" id="panel-login" role="tabpanel" aria-labelledby="tab-login">
+                <form id="form-login" class="auth-form" autocomplete="on">
+                    <div class="form-group">
+                        <label for="login-email" class="form-label">Email Address</label>
+                        <div class="input-icon-box">
+                            <svg class="field-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
+                            <input type="email" id="login-email" class="form-input" placeholder="student@university.edu" required autocomplete="email">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="login-password" class="form-label">Password</label>
+                            <button type="button" class="link-btn" id="link-to-forgot">Forgot?</button>
+                        </div>
+                        <div class="input-icon-box">
+                            <svg class="field-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                            <input type="password" id="login-password" class="form-input" placeholder="••••••••" required autocomplete="current-password">
+                            <button type="button" class="btn-toggle-pw" data-target="login-password" aria-label="Toggle password visibility">👁️</button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-submit" id="btn-submit-login">
+                        <span>Sign In</span>
+                    </button>
+                </form>
+
+                <div class="auth-footer-link">
+                    <span>Don't have an account?</span>
+                    <button type="button" class="link-btn" id="link-to-register">Create one free</button>
+                </div>
+            </section>
+
+            <!-- Panel 2: Register Form -->
+            <section class="auth-panel {% if initial_tab == 'register' %}active{% endif %}" id="panel-register" role="tabpanel" aria-labelledby="tab-register">
+                <form id="form-register" class="auth-form" autocomplete="on">
+                    <div class="form-group">
+                        <label for="register-name" class="form-label">Full Name</label>
+                        <div class="input-icon-box">
+                            <svg class="field-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                            <input type="text" id="register-name" class="form-input" placeholder="Rahul Sharma" required autocomplete="name">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="register-email" class="form-label">Email Address</label>
+                        <div class="input-icon-box">
+                            <svg class="field-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
+                            <input type="email" id="register-email" class="form-input" placeholder="student@university.edu" required autocomplete="email">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="register-password" class="form-label">Password (Min. 6 characters)</label>
+                        <div class="input-icon-box">
+                            <svg class="field-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                            <input type="password" id="register-password" class="form-input" placeholder="••••••••" required minlength="6" autocomplete="new-password">
+                            <button type="button" class="btn-toggle-pw" data-target="register-password" aria-label="Toggle password visibility">👁️</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="register-confirm" class="form-label">Confirm Password</label>
+                        <div class="input-icon-box">
+                            <svg class="field-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                            <input type="password" id="register-confirm" class="form-input" placeholder="••••••••" required minlength="6" autocomplete="new-password">
+                            <button type="button" class="btn-toggle-pw" data-target="register-confirm" aria-label="Toggle password visibility">👁️</button>
+                        </div>
+                    </div>
+
+                    <div class="form-checkbox-row">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="register-transfer-chats" checked>
+                            <span class="checkmark"></span>
+                            <span class="checkbox-text">Transfer my active guest conversations to this permanent account</span>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-submit" id="btn-submit-register">
+                        <span>Create Free Account</span>
+                    </button>
+                </form>
+
+                <div class="auth-footer-link">
+                    <span>Already have an account?</span>
+                    <button type="button" class="link-btn" id="link-to-login">Sign in</button>
+                </div>
+            </section>
+
+            <!-- Panel 3: Forgot / Reset Password -->
+            <section class="auth-panel {% if initial_tab == 'forgot' %}active{% endif %}" id="panel-forgot" role="tabpanel" aria-labelledby="tab-forgot">
+                <!-- Step 1: Request Token -->
+                <form id="form-forgot-request" class="auth-form">
+                    <p class="panel-desc">Enter your registered email address and we'll generate a secure password reset token.</p>
+                    <div class="form-group">
+                        <label for="forgot-email" class="form-label">Registered Email</label>
+                        <div class="input-icon-box">
+                            <svg class="field-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
+                            <input type="email" id="forgot-email" class="form-input" placeholder="student@university.edu" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-submit" id="btn-submit-forgot">
+                        <span>Generate Reset Token</span>
+                    </button>
+                </form>
+
+                <!-- Step 2: Use Token (Revealed after step 1 or if token is present) -->
+                <form id="form-reset-execute" class="auth-form hidden" style="margin-top:20px;">
+                    <div class="form-group">
+                        <label for="reset-token" class="form-label">Reset Token</label>
+                        <input type="text" id="reset-token" class="form-input" placeholder="Paste generated token" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reset-password" class="form-label">New Password</label>
+                        <input type="password" id="reset-password" class="form-input" placeholder="••••••••" required minlength="6">
+                    </div>
+                    <div class="form-group">
+                        <label for="reset-confirm" class="form-label">Confirm New Password</label>
+                        <input type="password" id="reset-confirm" class="form-input" placeholder="••••••••" required minlength="6">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-submit" id="btn-submit-reset">
+                        <span>Update Password</span>
+                    </button>
+                </form>
+
+                <div class="auth-footer-link">
+                    <span>Remember your password?</span>
+                    <button type="button" class="link-btn" id="link-forgot-to-login">Back to Sign In</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Auth Script -->
+    <script>
+    (function() {
+        "use strict";
+
+        // Tab Switching
+        const tabs = {
+            login: document.getElementById("tab-login"),
+            register: document.getElementById("tab-register"),
+            forgot: document.getElementById("tab-forgot"),
+        };
+        const panels = {
+            login: document.getElementById("panel-login"),
+            register: document.getElementById("panel-register"),
+            forgot: document.getElementById("panel-forgot"),
+        };
+
+        function switchTab(target) {
+            hideAlert();
+            Object.keys(tabs).forEach(k => {
+                if (k === target) {
+                    tabs[k].classList.add("active");
+                    tabs[k].setAttribute("aria-selected", "true");
+                    panels[k].classList.add("active");
+                } else {
+                    tabs[k].classList.remove("active");
+                    tabs[k].setAttribute("aria-selected", "false");
+                    panels[k].classList.remove("active");
+                }
+            });
+        }
+
+        tabs.login.addEventListener("click", () => switchTab("login"));
+        tabs.register.addEventListener("click", () => switchTab("register"));
+        tabs.forgot.addEventListener("click", () => switchTab("forgot"));
+
+        document.getElementById("link-to-register").addEventListener("click", () => switchTab("register"));
+        document.getElementById("link-to-login").addEventListener("click", () => switchTab("login"));
+        document.getElementById("link-to-forgot").addEventListener("click", () => switchTab("forgot"));
+        document.getElementById("link-forgot-to-login").addEventListener("click", () => switchTab("login"));
+
+        // Alert Helper
+        const alertBox = document.getElementById("auth-alert");
+        const alertText = document.getElementById("auth-alert-text");
+        document.getElementById("auth-alert-close").addEventListener("click", hideAlert);
+
+        function showAlert(msg, isSuccess = false) {
+            alertText.textContent = msg;
+            alertBox.classList.remove("hidden", "success");
+            if (isSuccess) alertBox.classList.add("success");
+        }
+        function hideAlert() {
+            alertBox.classList.add("hidden");
+        }
+
+        // Password visibility toggles
+        document.querySelectorAll(".btn-toggle-pw").forEach(btn => {
+            btn.addEventListener("click", function() {
+                const targetId = this.getAttribute("data-target");
+                const input = document.getElementById(targetId);
+                if (input.type === "password") {
+                    input.type = "text";
+                    this.textContent = "🙈";
+                } else {
+                    input.type = "password";
+                    this.textContent = "👁️";
+                }
+            });
+        });
+
+        // Continue as Guest
+        document.getElementById("btn-continue-guest").addEventListener("click", async function() {
+            this.disabled = true;
+            try {
+                const res = await fetch("/auth/guest", { method: "POST" });
+                const data = await res.json();
+                if (res.ok) {
+                    window.location.href = "/";
+                } else {
+                    showAlert(data.error || "Failed to start guest session.");
+                    this.disabled = false;
+                }
+            } catch (err) {
+                showAlert("Network connection error. Please try again.");
+                this.disabled = false;
+            }
+        });
+
+        // Sign In Form Submission
+        document.getElementById("form-login").addEventListener("submit", async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById("btn-submit-login");
+            const email = document.getElementById("login-email").value.trim();
+            const password = document.getElementById("login-password").value;
+
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner"></span> Signing in...`;
+            hideAlert();
+
+            try {
+                const res = await fetch("/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showAlert("Login successful! Redirecting to study dashboard...", true);
+                    setTimeout(() => { window.location.href = "/"; }, 600);
+                } else {
+                    showAlert(data.error || "Invalid credentials.");
+                    btn.disabled = false;
+                    btn.innerHTML = "Sign In";
+                }
+            } catch (err) {
+                showAlert("Unable to connect to server.");
+                btn.disabled = false;
+                btn.innerHTML = "Sign In";
+            }
+        });
+
+        // Sign Up Form Submission
+        document.getElementById("form-register").addEventListener("submit", async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById("btn-submit-register");
+            const name = document.getElementById("register-name").value.trim();
+            const email = document.getElementById("register-email").value.trim();
+            const password = document.getElementById("register-password").value;
+            const confirm_password = document.getElementById("register-confirm").value;
+            const transfer_guest_chats = document.getElementById("register-transfer-chats").checked;
+
+            if (password !== confirm_password) {
+                showAlert("Passwords do not match.");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner"></span> Creating account...`;
+            hideAlert();
+
+            try {
+                const res = await fetch("/auth/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name, email, password, confirm_password, transfer_guest_chats })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showAlert("Account created! Redirecting to study dashboard...", true);
+                    setTimeout(() => { window.location.href = "/"; }, 600);
+                } else {
+                    showAlert(data.error || "Failed to create account.");
+                    btn.disabled = false;
+                    btn.innerHTML = "Create Free Account";
+                }
+            } catch (err) {
+                showAlert("Unable to connect to server.");
+                btn.disabled = false;
+                btn.innerHTML = "Create Free Account";
+            }
+        });
+
+        // Forgot Password Step 1: Request Token
+        document.getElementById("form-forgot-request").addEventListener("submit", async function(e) {
+            e.preventDefault();
+            const email = document.getElementById("forgot-email").value.trim();
+            const btn = document.getElementById("btn-submit-forgot");
+
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner"></span> Processing...`;
+            hideAlert();
+
+            try {
+                const res = await fetch("/auth/forgot-password", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showAlert("Reset token generated! Enter your new password below.", true);
+                    document.getElementById("form-reset-execute").classList.remove("hidden");
+                    if (data.reset_token) {
+                        document.getElementById("reset-token").value = data.reset_token;
+                    }
+                    btn.disabled = false;
+                    btn.innerHTML = "Token Generated ✓";
+                } else {
+                    showAlert(data.error || "Failed to generate token.");
+                    btn.disabled = false;
+                    btn.innerHTML = "Generate Reset Token";
+                }
+            } catch (err) {
+                showAlert("Failed to contact server.");
+                btn.disabled = false;
+                btn.innerHTML = "Generate Reset Token";
+            }
+        });
+
+        // Forgot Password Step 2: Execute Reset
+        document.getElementById("form-reset-execute").addEventListener("submit", async function(e) {
+            e.preventDefault();
+            const token = document.getElementById("reset-token").value.trim();
+            const password = document.getElementById("reset-password").value;
+            const confirm_password = document.getElementById("reset-confirm").value;
+            const btn = document.getElementById("btn-submit-reset");
+
+            if (password !== confirm_password) {
+                showAlert("Passwords do not match.");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner"></span> Updating...`;
+
+            try {
+                const res = await fetch("/auth/reset-password", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ token, password, confirm_password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showAlert("Password updated! Switching to Sign In...", true);
+                    setTimeout(() => { switchTab("login"); }, 1200);
+                } else {
+                    showAlert(data.error || "Reset failed.");
+                    btn.disabled = false;
+                    btn.innerHTML = "Update Password";
+                }
+            } catch (err) {
+                showAlert("Server communication error.");
+                btn.disabled = false;
+                btn.innerHTML = "Update Password";
+            }
+        });
+
+    })();
+    </script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="StudyBuddy AI — Premium conversational AI study assistant powered by Google Gemini. Master computer science, programming, algorithms, and AI concepts with persistent multi-turn memory.">
+    <meta name="description" content="StudyBuddy AI — Premium multi-user conversational AI study assistant powered by Google Gemini. Master computer science, programming, algorithms, and AI concepts with persistent memory and guest access.">
     <title>StudyBuddy AI — Your Personal AI Study Assistant</title>
     <!-- Google Fonts for Modern Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -67,7 +67,6 @@
 
             <!-- Previous Conversations List Section -->
             <div class="sidebar-history-container" id="sidebar-history-container" role="navigation" aria-label="Saved conversations">
-                <!-- Grouped conversations rendered here dynamically -->
                 <div class="history-list" id="history-list"></div>
 
                 <!-- Empty State for History -->
@@ -82,12 +81,44 @@
                 </div>
             </div>
 
-            <!-- Sidebar Footer: Theme Toggle & Model Info -->
+            <!-- User Account & Profile Section -->
+            <div class="sidebar-user-section" id="sidebar-user-section">
+                <!-- If Registered User -->
+                <div class="user-card registered-user-card {% if not current_user or current_user.is_guest %}hidden{% endif %}" id="registered-user-card">
+                    <div class="user-avatar-sm" id="user-avatar-text">
+                        {{ current_user.name[:2].upper() if current_user and current_user.name else 'ST' }}
+                    </div>
+                    <div class="user-details">
+                        <span class="user-name" id="user-display-name">{{ current_user.name if current_user and not current_user.is_guest else 'Student' }}</span>
+                        <span class="user-email" id="user-display-email">{{ current_user.email if current_user and not current_user.is_guest else '' }}</span>
+                    </div>
+                    <button type="button" class="btn-icon" id="btn-logout" title="Sign Out">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    </button>
+                </div>
+
+                <!-- If Guest User -->
+                <div class="user-card guest-user-card {% if current_user and not current_user.is_guest %}hidden{% endif %}" id="guest-user-card">
+                    <div class="guest-card-top">
+                        <span class="guest-indicator-pill">Guest Account</span>
+                        <span class="guest-usage-text" id="guest-usage-text">{{ current_user.guest_message_count if current_user else 0 }}/25 used</span>
+                    </div>
+                    <div class="guest-card-actions">
+                        <button type="button" class="btn-upgrade-guest" id="btn-open-upgrade-modal" title="Upgrade to a free permanent account">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                            <span>Upgrade</span>
+                        </button>
+                        <a href="/login" class="link-auth-login" title="Sign in to your account">Sign In</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar Footer: Theme Toggle & Actions -->
             <div class="sidebar-footer">
                 <div class="footer-control-row">
                     <button type="button" class="btn-theme-toggle" id="theme-toggle-btn" title="Toggle Light / Dark Theme">
                         <span class="theme-icon dark-icon" aria-hidden="true">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="5"></circle>
                                 <line x1="12" y1="1" x2="12" y2="3"></line>
                                 <line x1="12" y1="21" x2="12" y2="23"></line>
@@ -100,22 +131,22 @@
                             </svg>
                         </span>
                         <span class="theme-icon light-icon" aria-hidden="true">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                             </svg>
                         </span>
                         <span class="theme-label" id="theme-label">Dark Mode</span>
                     </button>
                     <button type="button" class="btn-icon" id="clear-all-btn" title="Clear all conversation history" aria-label="Clear all conversations">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3 6 5 6 21 6"></polyline>
                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                         </svg>
                     </button>
                 </div>
-                <div class="sidebar-model-badge" title="Active LLM Backend">
+                <div class="sidebar-model-badge" title="Active Backend & Storage">
                     <span class="model-dot"></span>
-                    <span class="model-name">Gemini Flash • SQLite Enabled</span>
+                    <span class="model-name">Gemini Flash • Multi-User SQLite</span>
                 </div>
             </div>
         </aside>
@@ -160,6 +191,14 @@
                         </svg>
                         <span>New Chat</span>
                     </button>
+                    <!-- Account Navigation Link for Header -->
+                    <div class="header-auth-group">
+                        {% if current_user and not current_user.is_guest %}
+                            <button type="button" class="btn btn-sm btn-ghost" id="header-logout-btn">Log Out</button>
+                        {% else %}
+                            <a href="/login" class="btn btn-sm btn-primary">Sign In</a>
+                        {% endif %}
+                    </div>
                 </div>
             </header>
 
@@ -190,11 +229,11 @@
                         <h1 class="welcome-title">Welcome to StudyBuddy AI</h1>
                         <p class="welcome-subtitle">Your Personal AI Study Assistant</p>
                         <p class="welcome-desc">
-                            Ask anything about computer science, Python programming, algorithms, data structures, and machine learning. StudyBuddy AI retains context across turns with persistent database storage.
+                            Ask anything about computer science, Python programming, algorithms, data structures, and machine learning. Multi-turn context is stored securely with per-user data isolation.
                         </p>
                     </div>
 
-                    <!-- 6 Required Interactive Suggestion Cards -->
+                    <!-- 6 Interactive Suggestion Cards -->
                     <div class="suggestion-section">
                         <h2 class="suggestion-heading">Suggested Study Topics</h2>
                         <div class="suggestion-grid">
@@ -291,7 +330,7 @@
                     </div>
 
                     <div class="composer-actions">
-                        <!-- Stop Generation Button (visible only while generating) -->
+                        <!-- Stop Generation Button -->
                         <button type="button" id="stop-btn" class="btn btn-stop hidden" aria-label="Stop Generation" title="Stop generation">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <rect x="6" y="6" width="12" height="12" rx="2"></rect>
@@ -312,10 +351,46 @@
 
                 <div class="input-footer">
                     <span class="footer-hint">StudyBuddy AI maintains multi-turn context (up to 12 turns) with SQLite persistence.</span>
-                    <span class="session-badge" id="session-badge" title="Active Session ID">Session: Initializing...</span>
+                    <span class="session-badge" id="session-badge" title="Active Session">Session: Initializing...</span>
                 </div>
             </footer>
         </main>
+    </div>
+
+    <!-- Upgrade Guest Account Modal -->
+    <div class="modal-backdrop hidden" id="upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="upgrade-modal-title">
+        <div class="modal-card">
+            <h3 class="modal-title" id="upgrade-modal-title">Upgrade to Full Account</h3>
+            <p class="modal-desc">Create your free permanent account to enjoy unlimited AI chats, synchronized history across devices, and full study features.</p>
+            
+            <form id="form-upgrade-guest" autocomplete="on">
+                <div class="modal-body">
+                    <div class="form-group" style="margin-bottom:12px">
+                        <label for="upgrade-name" class="modal-label">Full Name</label>
+                        <input type="text" id="upgrade-name" class="modal-input" placeholder="Rahul Sharma" required autocomplete="name">
+                    </div>
+                    <div class="form-group" style="margin-bottom:12px">
+                        <label for="upgrade-email" class="modal-label">Email Address</label>
+                        <input type="email" id="upgrade-email" class="modal-input" placeholder="student@university.edu" required autocomplete="email">
+                    </div>
+                    <div class="form-group" style="margin-bottom:12px">
+                        <label for="upgrade-password" class="modal-label">Password (Min. 6 chars)</label>
+                        <input type="password" id="upgrade-password" class="modal-input" placeholder="••••••••" required minlength="6" autocomplete="new-password">
+                    </div>
+                    <div class="form-checkbox-row" style="margin-top:10px">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="upgrade-transfer-chats" checked>
+                            <span class="checkmark"></span>
+                            <span class="checkbox-text" style="font-size:12.5px">Transfer my existing guest conversations to this account</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-ghost" id="upgrade-cancel-btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="upgrade-confirm-btn">Create & Transfer</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- Rename Conversation Modal -->
@@ -337,7 +412,7 @@
     <div class="modal-backdrop hidden" id="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
         <div class="modal-card">
             <h3 class="modal-title" id="delete-modal-title">Delete Conversation?</h3>
-            <p class="modal-desc">This will permanently delete this conversation and all its messages from your local SQLite database. This action cannot be undone.</p>
+            <p class="modal-desc">This will permanently delete this conversation and all its messages. This action cannot be undone.</p>
             <div class="modal-actions">
                 <button type="button" class="btn btn-ghost" id="delete-cancel-btn">Cancel</button>
                 <button type="button" class="btn btn-danger" id="delete-confirm-btn">Delete</button>

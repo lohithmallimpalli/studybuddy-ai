@@ -424,3 +424,308 @@ def test_real_gemini_api_call(client):
     data = response.get_json()
     assert "reply" in data
     assert len(data["reply"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# Authentication & Multi-User Platform Tests
+# ---------------------------------------------------------------------------
+
+def test_auth_register_success(client):
+    """Verify successful user registration and session establishment."""
+    payload = {
+        "name": "Jane Doe",
+        "email": "jane@example.com",
+        "password": "securePassword123",
+        "confirm_password": "securePassword123"
+    }
+    res = client.post("/auth/register", json=payload)
+    assert res.status_code == 201
+    data = res.get_json()
+    assert data["status"] == "ok"
+    assert data["user"]["name"] == "Jane Doe"
+    assert data["user"]["email"] == "jane@example.com"
+    assert data["user"]["is_guest"] is False
+
+    # Check /auth/me returns the registered user
+    me_res = client.get("/auth/me")
+    assert me_res.status_code == 200
+    me_data = me_res.get_json()
+    assert me_data["user"]["email"] == "jane@example.com"
+    assert me_data["user"]["is_guest"] is False
+
+
+def test_auth_register_validation(client):
+    """Verify input validation for registration."""
+    # Missing fields
+    res = client.post("/auth/register", json={"name": "Alice"})
+    assert res.status_code == 400
+
+    # Invalid email
+    res = client.post("/auth/register", json={
+        "name": "Alice", "email": "invalid-email", "password": "pass123", "confirm_password": "pass123"
+    })
+    assert res.status_code == 400
+    assert "valid email" in res.get_json()["error"]
+
+    # Short password
+    res = client.post("/auth/register", json={
+        "name": "Alice", "email": "alice@example.com", "password": "123", "confirm_password": "123"
+    })
+    assert res.status_code == 400
+    assert "at least 6 characters" in res.get_json()["error"]
+
+    # Password mismatch
+    res = client.post("/auth/register", json={
+        "name": "Alice", "email": "alice@example.com", "password": "password1", "confirm_password": "password2"
+    })
+    assert res.status_code == 400
+    assert "do not match" in res.get_json()["error"]
+
+
+def test_auth_register_duplicate_email(client):
+    """Verify registering with an existing email returns 409 Conflict."""
+    payload = {
+        "name": "Bob",
+        "email": "bob@example.com",
+        "password": "mypassword123",
+        "confirm_password": "mypassword123"
+    }
+    res1 = client.post("/auth/register", json=payload)
+    assert res1.status_code == 201
+
+    res2 = client.post("/auth/register", json=payload)
+    assert res2.status_code == 409
+    assert "already exists" in res2.get_json()["error"]
+
+
+def test_auth_login_success_and_invalid(client):
+    """Verify login with correct and incorrect credentials."""
+    # Register user
+    client.post("/auth/register", json={
+        "name": "Charlie",
+        "email": "charlie@example.com",
+        "password": "mypassword123",
+        "confirm_password": "mypassword123"
+    })
+
+    # Wrong password
+    res_wrong_pw = client.post("/auth/login", json={
+        "email": "charlie@example.com",
+        "password": "wrongpassword"
+    })
+    assert res_wrong_pw.status_code == 401
+
+    # Unregistered email
+    res_no_user = client.post("/auth/login", json={
+        "email": "unknown@example.com",
+        "password": "mypassword123"
+    })
+    assert res_no_user.status_code == 401
+
+    # Successful login
+    res_ok = client.post("/auth/login", json={
+        "email": "charlie@example.com",
+        "password": "mypassword123"
+    })
+    assert res_ok.status_code == 200
+    assert res_ok.get_json()["user"]["name"] == "Charlie"
+
+
+def test_guest_session_provisioning(client):
+    """Verify guest session is automatically initialized with usage counters."""
+    res = client.get("/auth/me")
+    assert res.status_code == 200
+    user = res.get_json()["user"]
+    assert user["is_guest"] is True
+    assert user["name"] == "Guest Student"
+    assert user["guest_message_count"] == 0
+    assert user["guest_limit"] == 25
+
+    # Provision explicit fresh guest session
+    guest_res = client.post("/auth/guest")
+    assert guest_res.status_code == 200
+    new_guest = guest_res.get_json()["user"]
+    assert new_guest["is_guest"] is True
+    assert new_guest["id"] != user["id"]
+
+
+def test_multi_user_data_isolation(client, monkeypatch):
+    """Verify strict data isolation: User A cannot see, read, modify or delete User B's conversations."""
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy_test_key_for_mock")
+
+    # Client A: register Alice
+    client.post("/auth/register", json={
+        "name": "Alice User", "email": "alice.iso@example.com", "password": "password123", "confirm_password": "password123"
+    })
+    with patch("app.call_gemini_api", return_value="Alice response"):
+        res_a = client.post("/chat", json={"message": "Alice secret message", "conversation_id": "alice-conv-1"})
+        assert res_a.status_code == 200
+
+    # Create Client B: separate session for Bob
+    client_b = app.test_client()
+    client_b.post("/auth/register", json={
+        "name": "Bob User", "email": "bob.iso@example.com", "password": "password123", "confirm_password": "password123"
+    })
+    with patch("app.call_gemini_api", return_value="Bob response"):
+        res_b = client_b.post("/chat", json={"message": "Bob secret message", "conversation_id": "bob-conv-1"})
+        assert res_b.status_code == 200
+
+    # Bob's conversation list should ONLY contain Bob's conversation
+    b_list = client_b.get("/conversations").get_json()["conversations"]
+    b_ids = [c["id"] for c in b_list]
+    assert "bob-conv-1" in b_ids
+    assert "alice-conv-1" not in b_ids
+
+    # Bob attempting to retrieve Alice's conversation must return 404
+    b_get_alice = client_b.get("/conversations/alice-conv-1")
+    assert b_get_alice.status_code == 404
+
+    # Bob attempting to rename Alice's conversation must return 404
+    b_rename_alice = client_b.patch("/conversations/alice-conv-1", json={"title": "Hacked Title"})
+    assert b_rename_alice.status_code == 404
+
+    # Bob attempting to delete Alice's conversation must return 404
+    b_delete_alice = client_b.delete("/conversations/alice-conv-1")
+    assert b_delete_alice.status_code == 404
+
+    # Alice's conversation is untouched
+    a_conv = client.get("/conversations/alice-conv-1")
+    assert a_conv.status_code == 200
+    assert a_conv.get_json()["conversation"]["id"] == "alice-conv-1"
+
+
+def test_guest_isolation_between_different_guests(client, monkeypatch):
+    """Verify separate guest sessions cannot see or modify each other's conversations."""
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy_test_key_for_mock")
+
+    guest_1 = client
+    guest_2 = app.test_client()
+
+    with patch("app.call_gemini_api", return_value="Guest 1 answer"):
+        res1 = guest_1.post("/chat", json={"message": "Guest 1 topic", "conversation_id": "g1-conv"})
+        assert res1.status_code == 200
+
+    with patch("app.call_gemini_api", return_value="Guest 2 answer"):
+        res2 = guest_2.post("/chat", json={"message": "Guest 2 topic", "conversation_id": "g2-conv"})
+        assert res2.status_code == 200
+
+    # Guest 1 sees only g1-conv
+    g1_list = [c["id"] for c in guest_1.get("/conversations").get_json()["conversations"]]
+    assert "g1-conv" in g1_list
+    assert "g2-conv" not in g1_list
+
+    # Guest 2 cannot access g1-conv
+    assert guest_2.get("/conversations/g1-conv").status_code == 404
+    assert guest_2.delete("/conversations/g1-conv").status_code == 404
+
+
+def test_guest_upgrade_with_conversation_transfer(client, monkeypatch):
+    """Verify upgrading a guest to registered account transfers conversation ownership seamlessly."""
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy_test_key_for_mock")
+
+    # Start as guest and create a conversation
+    with patch("app.call_gemini_api", return_value="Pre-upgrade answer"):
+        client.post("/chat", json={"message": "Important guest study note", "conversation_id": "conv-upgrade-test"})
+
+    guest_convs = client.get("/conversations").get_json()["conversations"]
+    assert len(guest_convs) == 1
+    assert guest_convs[0]["id"] == "conv-upgrade-test"
+
+    # Upgrade guest account
+    upgrade_res = client.post("/auth/upgrade-guest", json={
+        "name": "Upgraded Student",
+        "email": "upgraded@example.com",
+        "password": "strongPassword123",
+        "transfer_chats": True
+    })
+    assert upgrade_res.status_code == 200
+    up_data = upgrade_res.get_json()
+    assert up_data["status"] == "ok"
+    assert up_data["transferred_conversations"] == 1
+    assert up_data["user"]["is_guest"] is False
+
+    # Check conversation is now retained under the registered account
+    reg_convs = client.get("/conversations").get_json()["conversations"]
+    assert len(reg_convs) == 1
+    assert reg_convs[0]["id"] == "conv-upgrade-test"
+
+    # Verify user profile in session is now registered
+    me_res = client.get("/auth/me")
+    assert me_res.get_json()["user"]["is_guest"] is False
+    assert me_res.get_json()["user"]["email"] == "upgraded@example.com"
+
+
+def test_guest_quota_enforcement(client, monkeypatch):
+    """Verify guest accounts cannot exceed GUEST_MESSAGE_LIMIT prompts."""
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy_test_key_for_mock")
+
+    # Initialize guest and manually update guest message count to limit in DB
+    me = client.get("/auth/me").get_json()["user"]
+    guest_id = me["id"]
+
+    from app import get_db, GUEST_MESSAGE_LIMIT
+    with get_db() as conn:
+        conn.execute("UPDATE users SET guest_message_count = ? WHERE id = ?", (GUEST_MESSAGE_LIMIT, guest_id))
+
+    # Next chat message must return 403 Forbidden
+    res = client.post("/chat", json={"message": "Exceeding limit test prompt"})
+    assert res.status_code == 403
+    data = res.get_json()
+    assert data["limit_reached"] is True
+    assert "quota reached" in data["error"].lower()
+
+
+def test_password_reset_workflow(client):
+    """Verify forgot password and token-based reset workflow."""
+    # Register user
+    client.post("/auth/register", json={
+        "name": "Sam Reset",
+        "email": "sam.reset@example.com",
+        "password": "initialPassword123",
+        "confirm_password": "initialPassword123"
+    })
+
+    # Request reset token
+    forgot_res = client.post("/auth/forgot-password", json={"email": "sam.reset@example.com"})
+    assert forgot_res.status_code == 200
+    token = forgot_res.get_json().get("reset_token")
+    assert token and len(token) > 20
+
+    # Reset with invalid token
+    bad_res = client.post("/auth/reset-password", json={
+        "token": "fake-invalid-token", "password": "newPassword123", "confirm_password": "newPassword123"
+    })
+    assert bad_res.status_code == 400
+
+    # Reset with valid token
+    ok_res = client.post("/auth/reset-password", json={
+        "token": token, "password": "newPassword123", "confirm_password": "newPassword123"
+    })
+    assert ok_res.status_code == 200
+
+    # Old password no longer works
+    fail_login = client.post("/auth/login", json={"email": "sam.reset@example.com", "password": "initialPassword123"})
+    assert fail_login.status_code == 401
+
+    # New password works
+    success_login = client.post("/auth/login", json={"email": "sam.reset@example.com", "password": "newPassword123"})
+    assert success_login.status_code == 200
+
+
+def test_logout_resets_to_fresh_guest(client):
+    """Verify logging out clears user session and provisions a fresh guest."""
+    # Register and log in
+    client.post("/auth/register", json={
+        "name": "Logout User", "email": "logout@example.com", "password": "password123", "confirm_password": "password123"
+    })
+    assert client.get("/auth/me").get_json()["user"]["is_guest"] is False
+
+    # Logout
+    logout_res = client.post("/auth/logout")
+    assert logout_res.status_code == 200
+    assert logout_res.get_json()["user"]["is_guest"] is True
+
+    # Next check confirms guest
+    me_res = client.get("/auth/me")
+    assert me_res.get_json()["user"]["is_guest"] is True
+
